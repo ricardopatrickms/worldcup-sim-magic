@@ -11,5 +11,10 @@ export default defineConfig({
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
     server: { entry: "server" },
+    // SPA mode: emit a static shell that mounts the app in the browser. The app is
+    // fully client-side (ESPN data is fetched in the browser), so this lets us host it
+    // as plain static files (GitHub Pages) with no server. Gated on an env var so the
+    // Lovable build keeps its normal SSR behavior — only the Pages CI build sets this.
+    spa: { enabled: process.env.GITHUB_PAGES === "true" },
   },
 });

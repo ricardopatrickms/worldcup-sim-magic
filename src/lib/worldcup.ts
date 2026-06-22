@@ -42,6 +42,8 @@ export interface KnockoutMatch {
   awayScore: number | null;
   // for draws in knockout, allow penalty winner
   penWinner?: "home" | "away" | null;
+  // manual pick (clicar na bandeira) para avançar um time sem placar
+  manualWinner?: "home" | "away" | null;
 }
 
 export interface Standing {
@@ -125,14 +127,21 @@ export function computeStandings(matches: GroupMatch[]): Record<GroupLetter, Sta
   return result;
 }
 
-// Best 8 third-placed teams
-export function rankThirds(standings: Record<GroupLetter, Standing[]>): Standing[] {
+// Best 8 third-placed teams.
+// `provisional` ranks the current third-placed teams even before every group
+// has finished (used for projetar o mata-mata com a fase de grupos em andamento).
+export function rankThirds(
+  standings: Record<GroupLetter, Standing[]>,
+  provisional = false,
+): Standing[] {
   const thirds = GROUP_LETTERS
     .map(g => standings[g][2])
     .filter(Boolean);
-  // only rank those that have played all 3 matches
-  const ready = thirds.filter(t => t.played === 3);
-  if (ready.length < thirds.length) return [];
+  if (!provisional) {
+    // only rank those that have played all 3 matches
+    const ready = thirds.filter(t => t.played === 3);
+    if (ready.length < thirds.length) return [];
+  }
   const sorted = [...thirds].sort((x, y) => {
     if (y.points !== x.points) return y.points - x.points;
     if (y.gd !== x.gd) return y.gd - x.gd;
@@ -259,6 +268,7 @@ export function buildEmptyKnockout(): Record<number, KnockoutMatch> {
       homeScore: null,
       awayScore: null,
       penWinner: null,
+      manualWinner: null,
     };
   }
   return m;
@@ -266,11 +276,16 @@ export function buildEmptyKnockout(): Record<number, KnockoutMatch> {
 
 export function winnerOf(m: KnockoutMatch): string | null {
   if (!m.home || !m.away) return null;
-  if (m.homeScore == null || m.awayScore == null) return null;
-  if (m.homeScore > m.awayScore) return m.home;
-  if (m.awayScore > m.homeScore) return m.away;
-  if (m.penWinner === "home") return m.home;
-  if (m.penWinner === "away") return m.away;
+  // Placar decide quando preenchido
+  if (m.homeScore != null && m.awayScore != null) {
+    if (m.homeScore > m.awayScore) return m.home;
+    if (m.awayScore > m.homeScore) return m.away;
+    if (m.penWinner === "home") return m.home;
+    if (m.penWinner === "away") return m.away;
+  }
+  // Sem placar decisivo: usa a escolha manual (clique na bandeira)
+  if (m.manualWinner === "home") return m.home;
+  if (m.manualWinner === "away") return m.away;
   return null;
 }
 
@@ -278,9 +293,14 @@ export function winnerOf(m: KnockoutMatch): string | null {
 export function populateKnockout(
   standings: Record<GroupLetter, Standing[]>,
   thirdAssign: Record<number, Standing | null>,
-  existing: Record<number, KnockoutMatch>
+  existing: Record<number, KnockoutMatch>,
+  project = false
 ): Record<number, KnockoutMatch> {
   const allGroupsComplete = GROUP_LETTERS.every(g => standings[g].every(s => s.played === 3));
+  // Em modo projeção, monta o bracket com as posições atuais assim que houver
+  // pelo menos um jogo disputado (evita projetar um bracket vazio/alfabético).
+  const anyPlayed = GROUP_LETTERS.some(g => standings[g].some(s => s.played > 0));
+  const shouldFill = allGroupsComplete || (project && anyPlayed);
 
   const next: Record<number, KnockoutMatch> = {};
   for (const r of KNOCKOUT_REFS) {
@@ -299,12 +319,13 @@ export function populateKnockout(
       next[id].homeScore = null;
       next[id].awayScore = null;
       next[id].penWinner = null;
+      next[id].manualWinner = null;
     }
     if (side === "home") next[id].home = val;
     else next[id].away = val;
   };
 
-  if (allGroupsComplete) {
+  if (shouldFill) {
     // Direct slots
     setSlot(73, "home", secondOf("A")); setSlot(73, "away", secondOf("B"));
     setSlot(74, "home", firstOf("E"));  setSlot(74, "away", thirdAssign[74]?.team ?? null);
