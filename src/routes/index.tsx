@@ -13,6 +13,7 @@ import {
   deriveThirdAssign,
   buildEmptyKnockout,
   populateKnockout,
+  matchDateLabel,
   winnerOf,
   sampleScores,
 } from "@/lib/worldcup";
@@ -625,11 +626,17 @@ function KnockoutCard({
   const winner = winnerOf(m);
   const drawn = m.home && m.away && m.homeScore != null && m.awayScore != null && m.homeScore === m.awayScore;
   const canEdit = !!(m.home && m.away);
+  const dateLabel = matchDateLabel(m.id);
   return (
     <div
       className={`rounded-md border p-1.5 ${winner ? "border-primary/60" : "border-border"}`}
       style={{ backgroundImage: "var(--gradient-card)" }}
     >
+      {dateLabel && (
+        <div className="mb-1 border-b border-border/60 pb-0.5 text-center text-[9px] font-medium uppercase tracking-wide text-muted-foreground leading-none">
+          {dateLabel}
+        </div>
+      )}
       <KnockoutRow team={m.home} ref_={m.homeRef} score={m.homeScore} onChange={v => onScore(m.id, "home", v)} onPick={() => onPick(m.id, "home")} canPick={canEdit} disabled={!canEdit} isWinner={winner === m.home} />
       <KnockoutRow team={m.away} ref_={m.awayRef} score={m.awayScore} onChange={v => onScore(m.id, "away", v)} onPick={() => onPick(m.id, "away")} canPick={canEdit} disabled={!canEdit} isWinner={winner === m.away} />
       {drawn && (

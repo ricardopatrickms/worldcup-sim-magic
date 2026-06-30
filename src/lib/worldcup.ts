@@ -294,6 +294,42 @@ export const KNOCKOUT_REFS: { id: number; homeRef: string; awayRef: string; roun
   { id: 104, homeRef: "Vencedor Jogo 101", awayRef: "Vencedor Jogo 102", round: "Final" },
 ];
 
+// Datas e horários oficiais do mata-mata (em UTC), conforme o calendário da
+// FIFA 2026 — exibidos no horário de Brasília. A disputa de 3º lugar (jogo 103,
+// 18/07) não faz parte do nosso chaveamento.
+export const KNOCKOUT_DATES: Record<number, string> = {
+  // 32-avos
+  73: "2026-06-28T19:00Z", 74: "2026-06-29T20:30Z", 75: "2026-06-30T01:00Z",
+  76: "2026-06-29T17:00Z", 77: "2026-06-30T21:00Z", 78: "2026-06-30T17:00Z",
+  79: "2026-07-01T01:00Z", 80: "2026-07-01T16:00Z", 81: "2026-07-02T00:00Z",
+  82: "2026-07-01T20:00Z", 83: "2026-07-02T23:00Z", 84: "2026-07-02T19:00Z",
+  85: "2026-07-03T03:00Z", 86: "2026-07-03T22:00Z", 87: "2026-07-04T01:30Z",
+  88: "2026-07-03T18:00Z",
+  // Oitavas
+  89: "2026-07-04T17:00Z", 90: "2026-07-04T21:00Z", 91: "2026-07-05T20:00Z",
+  92: "2026-07-06T00:00Z", 93: "2026-07-06T19:00Z", 94: "2026-07-07T00:00Z",
+  95: "2026-07-07T16:00Z", 96: "2026-07-07T20:00Z",
+  // Quartas
+  97: "2026-07-09T20:00Z", 98: "2026-07-10T19:00Z", 99: "2026-07-11T21:00Z",
+  100: "2026-07-12T01:00Z",
+  // Semifinais
+  101: "2026-07-14T19:00Z", 102: "2026-07-15T19:00Z",
+  // Final
+  104: "2026-07-19T19:00Z",
+};
+
+// Rótulo curto "dom 28/06 · 16:00" (dia da semana, data e hora em Brasília).
+export function matchDateLabel(id: number): string | null {
+  const iso = KNOCKOUT_DATES[id];
+  if (!iso) return null;
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    weekday: "short", day: "2-digit", month: "2-digit",
+    hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
+  }).formatToParts(new Date(iso));
+  const g = (t: string) => parts.find(p => p.type === t)?.value ?? "";
+  return `${g("weekday").replace(".", "")} ${g("day")}/${g("month")} · ${g("hour")}:${g("minute")}`;
+}
+
 export function buildEmptyKnockout(): Record<number, KnockoutMatch> {
   const m: Record<number, KnockoutMatch> = {};
   for (const r of KNOCKOUT_REFS) {
