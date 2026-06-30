@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   GROUPS,
   GROUP_LETTERS,
@@ -179,6 +179,16 @@ function Index() {
       setRealStatus({ kind: "error", msg: `Falha: ${e instanceof Error ? e.message : String(e)}` });
     }
   };
+
+  // Puxa os resultados reais automaticamente a cada carregamento da página
+  // (uma única vez por load — sem polling; ao recarregar, busca de novo).
+  const autoPulled = useRef(false);
+  useEffect(() => {
+    if (!hydrated || autoPulled.current) return;
+    autoPulled.current = true;
+    pullRealResults();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
 
   const groupsComplete = GROUP_LETTERS.every(g => standings[g].every(s => s.played === 3));
   const koProvisional = projectKO && !groupsComplete && GROUP_LETTERS.some(g => standings[g].some(s => s.played > 0));
