@@ -10,6 +10,7 @@ import {
   computeStandings,
   rankThirds,
   assignThirds,
+  deriveThirdAssign,
   buildEmptyKnockout,
   populateKnockout,
   winnerOf,
@@ -35,6 +36,9 @@ const BRAZIL = "Brasil";
 interface State {
   matches: GroupMatch[];
   knockout: Record<number, KnockoutMatch>;
+  // Confrontos reais da R32 (ESPN), guardados para reproduzir a alocação oficial
+  // dos terceiros mesmo após recarregar a página sem buscar de novo.
+  realR32?: [string, string][];
 }
 
 function loadState(): State {
@@ -82,7 +86,12 @@ function Index() {
 
   const standings = useMemo(() => computeStandings(state.matches), [state.matches]);
   const thirds = useMemo(() => rankThirds(standings, projectKO), [standings, projectKO]);
-  const thirdAssign = useMemo(() => assignThirds(thirds), [thirds]);
+  // Quando há o chaveamento real (após puxar resultados), usa a alocação oficial
+  // dos terceiros lida da ESPN; senão, cai no algoritmo guloso (simulação manual).
+  const thirdAssign = useMemo(
+    () => deriveThirdAssign(standings, state.realR32 ?? []) ?? assignThirds(thirds),
+    [standings, state.realR32, thirds],
+  );
   // Os 8 melhores terceiros que se classificam ao mata-mata.
   const qualifiedThirds = useMemo(() => new Set(thirds.slice(0, 8).map(t => t.team)), [thirds]);
 
@@ -133,12 +142,13 @@ function Index() {
 
   const reset = () => {
     if (!confirm("Resetar toda a simulação?")) return;
-    setState({ matches: generateGroupMatches(), knockout: buildEmptyKnockout() });
+    setState({ matches: generateGroupMatches(), knockout: buildEmptyKnockout(), realR32: [] });
   };
 
   const fillSample = () => {
     setState(s => ({
       ...s,
+      realR32: [],
       matches: s.matches.map((m, i) => ({
         ...m,
         homeScore: sampleScores(i * 7 + 3),
@@ -150,12 +160,15 @@ function Index() {
   const pullRealResults = async () => {
     setRealStatus({ kind: "loading", msg: "Buscando resultados reais..." });
     try {
-      const { index, fetched, live, unmapped } = await fetchRealResults();
+      const { index, fetched, live, unmapped, r32 } = await fetchRealResults();
       if (fetched === 0) {
         setRealStatus({ kind: "error", msg: "Nenhum resultado disponível ainda." });
         return;
       }
-      setState(s => applyRealResults(s.matches, s.knockout, index, projectKO));
+      setState(s => ({
+        ...applyRealResults(s.matches, s.knockout, index, projectKO, r32),
+        realR32: r32,
+      }));
       if (unmapped.length) console.warn("Seleções não mapeadas (ESPN):", unmapped);
       setRealStatus({
         kind: "ok",

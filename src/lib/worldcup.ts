@@ -216,6 +216,44 @@ export function assignThirds(
   return out;
 }
 
+// Cada vaga de terceiro é "dona" do 1º colocado de um grupo específico
+// (ex.: a vaga do Jogo 74 enfrenta sempre o 1º do Grupo E).
+const THIRD_SLOT_FIRST_GROUP: Record<number, GroupLetter> = {
+  74: "E", 77: "I", 79: "A", 80: "L", 81: "D", 82: "G", 85: "B", 87: "K",
+};
+
+// Deriva a alocação dos terceiros a partir do chaveamento REAL da R32 (ESPN).
+// A FIFA usa uma tabela oficial fixa (uma das 495 combinações de quais 8 grupos
+// classificam o terceiro) que o algoritmo guloso de `assignThirds` não reproduz.
+// Como a feed já traz os confrontos reais "1º X vs 3º Y", lemos a alocação da
+// fonte em vez de adivinhar. Retorna null se não for possível resolver as 8
+// vagas (ex.: R32 ainda não definida) — aí o chamador cai no fallback guloso.
+export function deriveThirdAssign(
+  standings: Record<GroupLetter, Standing[]>,
+  r32Fixtures: [string, string][],
+): Record<number, Standing | null> | null {
+  const byTeam = new Map<string, Standing>();
+  for (const g of GROUP_LETTERS) for (const s of standings[g]) byTeam.set(s.team, s);
+
+  // grupo do 1º colocado → standing do 3º que o enfrenta na R32
+  const thirdByFirstGroup: Partial<Record<GroupLetter, Standing>> = {};
+  for (const [a, b] of r32Fixtures) {
+    const sa = byTeam.get(a), sb = byTeam.get(b);
+    if (!sa || !sb) continue;
+    const first = sa.position === 1 ? sa : sb.position === 1 ? sb : null;
+    const third = sa.position === 3 ? sa : sb.position === 3 ? sb : null;
+    if (first && third) thirdByFirstGroup[first.group] = third;
+  }
+
+  const out: Record<number, Standing | null> = {};
+  for (const slot of THIRD_SLOTS) {
+    const third = thirdByFirstGroup[THIRD_SLOT_FIRST_GROUP[slot.matchId]];
+    if (!third) return null; // vaga não resolvida → deixa o fallback decidir
+    out[slot.matchId] = third;
+  }
+  return out;
+}
+
 // Knockout structure
 export const KNOCKOUT_REFS: { id: number; homeRef: string; awayRef: string; round: string }[] = [
   // Round of 32

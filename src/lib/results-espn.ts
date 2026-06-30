@@ -9,6 +9,7 @@ import {
   computeStandings,
   rankThirds,
   assignThirds,
+  deriveThirdAssign,
   populateKnockout,
 } from "./worldcup";
 
@@ -90,6 +91,10 @@ export interface FetchSummary {
   fetched: number; // jogos com placar (encerrados + ao vivo)
   live: number;
   unmapped: string[]; // nomes da ESPN sem correspondência (diagnóstico)
+  // Confrontos reais das oitavas-de-32 (mesmo os ainda não iniciados, que já
+  // vêm com as seleções definidas). Usados para ler a alocação oficial dos
+  // terceiros colocados direto da fonte. Pares em português.
+  r32: [string, string][];
 }
 
 export async function fetchRealResults(): Promise<FetchSummary> {
@@ -100,6 +105,7 @@ export async function fetchRealResults(): Promise<FetchSummary> {
 
   const index: ResultIndex = new Map();
   const unmapped = new Set<string>();
+  const r32: [string, string][] = [];
   let fetched = 0;
   let live = 0;
 
@@ -110,15 +116,24 @@ export async function fetchRealResults(): Promise<FetchSummary> {
     const awayC = cs.find((c) => c.homeAway === "away");
     if (!homeC || !awayC) continue;
 
-    // Pula jogos que ainda não começaram (no mata-mata vêm com placeholders
-    // do tipo "Group H Winner"/"Round of 32 X Winner" no lugar das seleções).
     const state = ev?.status?.type?.state as string | undefined; // 'pre' | 'in' | 'post'
-    if (state === "pre") continue;
-
     const homeEn = homeC.team?.displayName;
     const awayEn = awayC.team?.displayName;
     const home = EN_TO_PT[homeEn];
     const away = EN_TO_PT[awayEn];
+
+    // Confrontos da R32 já vêm com as seleções definidas mesmo antes de começar
+    // (`season.slug === "round-of-32"`). Capturamos todos — inclusive os "pre" —
+    // para derivar a alocação oficial dos terceiros. Jogos com placeholders
+    // ("Group H Winner") simplesmente não mapeiam e são ignorados.
+    if (ev?.season?.slug === "round-of-32" && home && away) {
+      r32.push([home, away]);
+    }
+
+    // Para o índice de placares, pula jogos que ainda não começaram (no mata-mata
+    // vêm com placeholders do tipo "Round of 32 X Winner" no lugar das seleções).
+    if (state === "pre") continue;
+
     if (!home) unmapped.add(homeEn);
     if (!away) unmapped.add(awayEn);
     if (!home || !away) continue;
@@ -145,7 +160,7 @@ export async function fetchRealResults(): Promise<FetchSummary> {
     if (isLive) live++;
   }
 
-  return { index, fetched, live, unmapped: [...unmapped] };
+  return { index, fetched, live, unmapped: [...unmapped], r32 };
 }
 
 // Aplica os resultados reais ao estado do simulador: preenche os jogos da fase
@@ -156,6 +171,7 @@ export function applyRealResults(
   knockout: Record<number, KnockoutMatch>,
   index: ResultIndex,
   project = false,
+  r32Fixtures: [string, string][] = [],
 ): { matches: GroupMatch[]; knockout: Record<number, KnockoutMatch> } {
   // 1) Fase de grupos: orienta o placar conforme o mandante do simulador.
   const newMatches = matches.map((m) => {
@@ -171,7 +187,8 @@ export function applyRealResults(
   // 2) Recalcula a classificação e popula os confrontos do mata-mata.
   const standings = computeStandings(newMatches);
   const thirds = rankThirds(standings, project);
-  const assign = assignThirds(thirds);
+  // Prefere a alocação oficial lida da R32 real; cai no guloso se indisponível.
+  const assign = deriveThirdAssign(standings, r32Fixtures) ?? assignThirds(thirds);
   let ko = populateKnockout(standings, assign, knockout, project);
 
   // 3) Preenche o mata-mata rodada a rodada; re-popular após cada rodada
